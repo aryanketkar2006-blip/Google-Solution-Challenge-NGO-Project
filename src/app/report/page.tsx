@@ -126,37 +126,96 @@ export default function ReportPage() {
     }
   };
 
-  if (authLoading) return <div className="flex justify-center p-20"><Loader2 className="animate-spin" /></div>;
+  if (authLoading) return (
+    <div className="flex justify-center p-20" style={{ minHeight: "100vh", background: "#0F1117" }}>
+      <Loader2 className="animate-spin" style={{ color: "#4D9EFF" }} />
+    </div>
+  );
 
   return (
-    <div className="container max-w-2xl py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>Report a Civic Issue</CardTitle>
-          <CardDescription>Provide details about the issue to help NGOs take action.</CardDescription>
-        </CardHeader>
-        <CardContent>
+    <div style={{
+      minHeight: "100vh",
+      position: "relative",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "40px 16px",
+    }}>
+      {/* Full-bleed background image */}
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 0,
+        backgroundImage: "url('/report-bg.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+      }} />
+      {/* Lightened overlay — lets the background breathe */}
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 1,
+        background: "linear-gradient(135deg, rgba(10,14,26,0.52) 0%, rgba(10,14,26,0.38) 100%)",
+      }} />
+
+      {/* Glowing halo behind card */}
+      <div style={{
+        position: "absolute", zIndex: 2,
+        width: 520, height: 520,
+        borderRadius: "50%",
+        background: "radial-gradient(circle, rgba(46,170,74,0.18) 0%, transparent 70%)",
+        filter: "blur(40px)",
+        pointerEvents: "none",
+      }} />
+
+      {/* Glassmorphic card — more translucent, stronger blur */}
+      <div style={{
+        position: "relative", zIndex: 3,
+        width: "100%", maxWidth: 640,
+        background: "rgba(12, 18, 30, 0.52)",
+        backdropFilter: "blur(32px) saturate(160%)",
+        WebkitBackdropFilter: "blur(32px) saturate(160%)",
+        border: "1px solid rgba(255,255,255,0.22)",
+        borderRadius: 20,
+        boxShadow: "0 12px 56px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06) inset",
+        overflow: "hidden",
+      }}>
+        {/* Accent top bar */}
+        <div style={{ height: 4, background: "linear-gradient(90deg, #1A3DAB, #2EAA4A)", width: "100%" }} />
+
+        <div style={{ padding: "24px 32px 8px", display: "flex", flexDirection: "column", gap: 6 }}>
+          <a href="/dashboard" style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "rgba(255,255,255,0.4)", fontSize: "0.8rem", fontWeight: 500, textDecoration: "none", marginBottom: 8, width: "fit-content", transition: "color 0.2s" }}
+            onMouseEnter={e => e.currentTarget.style.color = "rgba(255,255,255,0.75)"}
+            onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.4)"}
+          >
+            ← Back to Dashboard
+          </a>
+          <h2 style={{ fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "1.35rem", color: "#fff", marginBottom: 2 }}>Report a Civic Issue</h2>
+          <p style={{ color: "rgba(255,255,255,0.45)", fontSize: "0.875rem", marginBottom: 0 }}>Provide details about the issue to help NGOs take action.</p>
+        </div>
+
+        <div style={{ padding: "20px 32px 32px" }}>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Category</label>
-              <Input placeholder="e.g., Pothole, Garbage, Water Leak" {...register("category")} />
+              <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>Category</label>
+              <Input placeholder="e.g., Pothole, Garbage, Water Leak" {...register("category")}
+                style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10 }}
+              />
               {errors.category && <p className="text-xs text-destructive">{errors.category.message}</p>}
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium">Description</label>
-              <Textarea placeholder="Explain the issue in detail..." {...register("description")} />
+              <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>Description</label>
+              <Textarea placeholder="Explain the issue in detail..." {...register("description")}
+                style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10, minHeight: 100 }}
+              />
               {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-sm font-medium">Priority</label>
-                <Select 
+                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>Priority</label>
+                <Select
                   defaultValue={ReportPriority.MEDIUM}
                   onValueChange={(val) => setValue("priority", val as ReportPriority)}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10 }}>
                     <SelectValue placeholder="Select Priority" />
                   </SelectTrigger>
                   <SelectContent>
@@ -168,7 +227,7 @@ export default function ReportPage() {
               </div>
               
               <div className="space-y-2">
-                <label className="text-sm font-medium">Image (Optional)</label>
+                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>Image (Optional)</label>
                 <div className="flex items-center gap-2">
                   <Input type="file" accept="image/*" className="hidden" id="image-upload" onChange={onImageChange} />
                   <Button type="button" variant="outline" className="w-full gap-2" onClick={() => document.getElementById('image-upload')?.click()}>
@@ -186,7 +245,7 @@ export default function ReportPage() {
 
             <div className="space-y-4 pt-4 border-t">
               <div className="flex items-center justify-between">
-                <label className="text-sm font-medium">Location Details</label>
+                <label className="text-sm font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>Location Details</label>
                 <Button type="button" variant="ghost" size="sm" className="text-primary gap-1" onClick={handleLocationDetection}>
                   <MapPin className="h-3 w-3" /> Detect My Location
                 </Button>
@@ -194,16 +253,24 @@ export default function ReportPage() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Input placeholder="Latitude" {...register("latitude")} />
+                  <Input placeholder="Latitude" {...register("latitude")}
+                    style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10 }}
+                  />
                 </div>
                 <div className="space-y-1">
-                  <Input placeholder="Longitude" {...register("longitude")} />
+                  <Input placeholder="Longitude" {...register("longitude")}
+                    style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10 }}
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <Input placeholder="City (Optional)" {...register("city")} />
-                <Input placeholder="State (Optional)" {...register("state")} />
+                <Input placeholder="City (Optional)" {...register("city")}
+                  style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10 }}
+                />
+                <Input placeholder="State (Optional)" {...register("state")}
+                  style={{ background: "rgba(255,255,255,0.1)", border: "1px solid rgba(255,255,255,0.2)", color: "#fff", borderRadius: 10 }}
+                />
               </div>
               {(errors.latitude || errors.longitude) && (
                 <p className="text-xs text-destructive flex items-center gap-1">
@@ -217,8 +284,8 @@ export default function ReportPage() {
               Submit Report
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -6,376 +6,321 @@ import { db } from "@/lib/firebase";
 import { collection, query, orderBy, onSnapshot, doc, updateDoc } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, MapPin, Clock, CheckCircle, CheckCircle2, X, Search } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { toast } from "sonner";
 import Image from "next/image";
-import { 
-  Report, 
-  ReportStatus, 
-  ReportPriority, 
-  UserRole, 
-  CollaborationStatus
-} from "@/models/types";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Report, ReportStatus, ReportPriority, UserRole } from "@/models/types";
+import { auth } from "@/lib/firebase";
+import { signOut } from "firebase/auth";
 
 function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number) {
-  const R = 6371; // Radius of the earth in km
+  const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = 
-    0.5 - Math.cos(dLat)/2 + 
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-    (1 - Math.cos(dLon))/2;
-
+  const a = 0.5 - Math.cos(dLat) / 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * (1 - Math.cos(dLon)) / 2;
   return R * 2 * Math.asin(Math.sqrt(a));
 }
+
+const glass: React.CSSProperties = {
+  background: "rgba(12, 18, 30, 0.52)",
+  backdropFilter: "blur(24px) saturate(160%)",
+  WebkitBackdropFilter: "blur(24px) saturate(160%)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  borderRadius: 14,
+};
+
+const inputGlass: React.CSSProperties = {
+  background: "rgba(255,255,255,0.08)",
+  border: "1px solid rgba(255,255,255,0.18)",
+  color: "#fff",
+  borderRadius: 8,
+  width: "100%",
+  padding: "8px 12px",
+  fontSize: "0.875rem",
+  outline: "none",
+};
 
 export default function NGODashboard() {
   const { user, role, loading: authLoading } = useAuth();
   const router = useRouter();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
-  const [ngoLocation, setNgoLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [ngoLocation, setNgoLocation] = useState<{ lat: number; lng: number } | null>(null);
 
-  // Filter states
-  const [filterCategory, setFilterCategory] = useState<string>("all");
-  const [filterStatus, setFilterStatus] = useState<string>(ReportStatus.PENDING); // Default open
+  const [filterStatus, setFilterStatus] = useState<string>(ReportStatus.PENDING);
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterCity, setFilterCity] = useState<string>("");
   const [filterNearMe, setFilterNearMe] = useState<boolean>(false);
-  const [filterRadius, setFilterRadius] = useState<number>(5); // Default 5km
+  const [filterRadius, setFilterRadius] = useState<number>(5);
   const [filterStartDate, setFilterStartDate] = useState<string>("");
   const [filterEndDate, setFilterEndDate] = useState<string>("");
 
   useEffect(() => {
-    if (!authLoading && (!user || role !== UserRole.NGO)) {
-      router.push("/dashboard");
-      return;
-    }
-
+    if (!authLoading && (!user || role !== UserRole.NGO)) { router.push("/dashboard"); return; }
     if (user && role === UserRole.NGO) {
-      const q = query(
-        collection(db, "reports"),
-        orderBy("createdAt", "desc")
-      );
-
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        const reportsData: Report[] = [];
-        snapshot.forEach((doc) => {
-          reportsData.push({ id: doc.id, ...doc.data() } as Report);
-        });
-        setReports(reportsData);
+      const q = query(collection(db, "reports"), orderBy("createdAt", "desc"));
+      const unsub = onSnapshot(q, (snap) => {
+        setReports(snap.docs.map(d => ({ id: d.id, ...d.data() } as Report)));
         setLoading(false);
-      }, (error) => {
-        console.error("Error fetching reports:", error);
-        setLoading(false);
-      });
-
-      return () => {
-        unsubscribe();
-      };
+      }, () => setLoading(false));
+      return () => unsub();
     }
   }, [user, role, authLoading, router]);
 
-  const filteredReports = useMemo(() => {
-    return reports.filter(report => {
-      // Basic Role/Assignment Logic
-      const isVisible = report.status === ReportStatus.PENDING || (report.assignedNgoId === user?.uid);
-      if (!isVisible) return false;
+  const filteredReports = useMemo(() => reports.filter(r => {
+    if (!(r.status === ReportStatus.PENDING || r.assignedNgoId === user?.uid)) return false;
+    if (filterStatus !== "all" && r.status !== filterStatus) return false;
+    if (filterPriority !== "all" && r.priority !== filterPriority) return false;
+    if (filterCity && !r.location.city?.toLowerCase().includes(filterCity.toLowerCase())) return false;
+    if (filterNearMe && ngoLocation && calculateDistance(ngoLocation.lat, ngoLocation.lng, r.location.lat, r.location.lng) > filterRadius) return false;
+    const rd = new Date(r.createdAt);
+    if (filterStartDate && rd < new Date(filterStartDate)) return false;
+    if (filterEndDate && rd > new Date(filterEndDate)) return false;
+    return true;
+  }), [reports, filterStatus, filterPriority, filterCity, filterNearMe, ngoLocation, filterRadius, filterStartDate, filterEndDate, user?.uid]);
 
-      // Category Filter
-      if (filterCategory !== "all" && report.category !== filterCategory) return false;
-
-      // Status Filter
-      if (filterStatus !== "all" && report.status !== filterStatus) return false;
-
-      // Priority Filter
-      if (filterPriority !== "all" && report.priority !== filterPriority) return false;
-
-      // City/Area Search
-      if (filterCity && !report.location.city?.toLowerCase().includes(filterCity.toLowerCase())) return false;
-
-      // Near Me Filter
-      if (filterNearMe && ngoLocation) {
-        const distance = calculateDistance(
-          ngoLocation.lat, ngoLocation.lng,
-          report.location.lat, report.location.lng
-        );
-        // Include reports within the selected radius (inclusive of 0 distance)
-        if (distance > filterRadius) return false;
-      }
-
-      // Date Range Filter
-      const reportDate = new Date(report.createdAt);
-      if (filterStartDate && reportDate < new Date(filterStartDate)) return false;
-      if (filterEndDate && reportDate > new Date(filterEndDate)) return false;
-
-      return true;
-    });
-  }, [reports, filterCategory, filterStatus, filterPriority, filterCity, filterNearMe, ngoLocation, filterRadius, filterStartDate, filterEndDate, user?.uid]);
-
-  const resetFilters = () => {
-    setFilterCategory("all");
-    setFilterStatus(ReportStatus.PENDING);
-    setFilterPriority("all");
-    setFilterCity("");
-    setFilterNearMe(false);
-    setFilterRadius(5);
-    setFilterStartDate("");
-    setFilterEndDate("");
-  };
+  const resetFilters = () => { setFilterStatus(ReportStatus.PENDING); setFilterPriority("all"); setFilterCity(""); setFilterNearMe(false); setFilterRadius(5); setFilterStartDate(""); setFilterEndDate(""); };
 
   const handleToggleNearMe = () => {
     if (!filterNearMe && !ngoLocation) {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            setNgoLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-            setFilterNearMe(true);
-            toast.success("Location acquired! Filter applied.");
-          },
-          () => {
-            toast.error("Could not get location. Please enter manually.");
-          }
-        );
-      } else {
-        toast.error("Geolocation is not supported by your browser.");
-      }
-    } else {
-      setFilterNearMe(!filterNearMe);
-    }
+      navigator.geolocation?.getCurrentPosition(
+        pos => { setNgoLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }); setFilterNearMe(true); toast.success("Location acquired!"); },
+        () => toast.error("Could not get location.")
+      );
+    } else { setFilterNearMe(v => !v); }
   };
 
   const handleUpdateStatus = async (reportId: string, newStatus: ReportStatus.ACCEPTED | ReportStatus.RESOLVED) => {
     try {
-      const reportRef = doc(db, "reports", reportId);
-      const updateData: Partial<Report> = { status: newStatus };
-      if (newStatus === ReportStatus.ACCEPTED) {
-        updateData.assignedNgoId = user?.uid;
-      }
-      await updateDoc(reportRef, updateData);
+      const upd: Partial<Report> = { status: newStatus };
+      if (newStatus === ReportStatus.ACCEPTED) upd.assignedNgoId = user?.uid;
+      await updateDoc(doc(db, "reports", reportId), upd);
       toast.success(`Report marked as ${newStatus}`);
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to update report";
-      toast.error(message);
-    }
+    } catch (e: unknown) { toast.error(e instanceof Error ? e.message : "Failed to update"); }
   };
 
-  if (authLoading || loading) {
-    return <div className="flex flex-1 items-center justify-center"><Loader2 className="animate-spin h-8 w-8 text-primary" /></div>;
-  }
+  const handleLogout = async () => { await signOut(auth); router.push("/"); };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case ReportStatus.PENDING:
-        return <Badge className="bg-yellow-500 hover:bg-yellow-600"><Clock className="w-3 h-3 mr-1"/> Pending</Badge>;
-      case ReportStatus.ACCEPTED:
-        return <Badge className="bg-blue-500 hover:bg-blue-600"><CheckCircle className="w-3 h-3 mr-1"/> Accepted</Badge>;
-      case ReportStatus.RESOLVED:
-        return <Badge className="bg-green-500 hover:bg-green-600"><CheckCircle2 className="w-3 h-3 mr-1"/> Resolved</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+  if (authLoading || loading) return (
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#0A0E1A" }}>
+      <Loader2 className="animate-spin h-10 w-10" style={{ color: "#4D9EFF" }} />
+    </div>
+  );
+
+  const statusConfig = (s: string) => {
+    if (s === ReportStatus.PENDING) return { label: "Pending", color: "#F59E0B", bg: "rgba(245,158,11,0.15)", icon: <Clock size={11} /> };
+    if (s === ReportStatus.ACCEPTED) return { label: "Accepted", color: "#4D9EFF", bg: "rgba(77,158,255,0.15)", icon: <CheckCircle size={11} /> };
+    if (s === ReportStatus.RESOLVED) return { label: "Resolved", color: "#22C55E", bg: "rgba(34,197,94,0.15)", icon: <CheckCircle2 size={11} /> };
+    return { label: s, color: "#9CA3AF", bg: "rgba(156,163,175,0.15)", icon: null };
   };
 
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case ReportPriority.HIGH:
-        return <Badge variant="destructive" className="ml-2 uppercase text-[10px]">High</Badge>;
-      case ReportPriority.MEDIUM:
-        return <Badge variant="secondary" className="ml-2 uppercase text-[10px] bg-orange-100 text-orange-700">Medium</Badge>;
-      case ReportPriority.LOW:
-        return <Badge variant="secondary" className="ml-2 uppercase text-[10px] bg-blue-100 text-blue-700">Low</Badge>;
-      default:
-        return null;
-    }
+  const priorityConfig = (p: string) => {
+    if (p === ReportPriority.HIGH) return { label: "HIGH", color: "#EF4444", bg: "rgba(239,68,68,0.15)" };
+    if (p === ReportPriority.MEDIUM) return { label: "MED", color: "#F97316", bg: "rgba(249,115,22,0.15)" };
+    return { label: "LOW", color: "#3B82F6", bg: "rgba(59,130,246,0.15)" };
   };
+
+  const labelStyle: React.CSSProperties = { color: "rgba(255,255,255,0.5)", fontSize: "0.7rem", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", display: "block", marginBottom: 4 };
 
   return (
-    <div className="flex-1 container py-8">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
-        <h1 className="text-3xl font-bold">NGO Operations Dashboard</h1>
-        <Button variant="outline" size="sm" onClick={resetFilters} className="gap-2">
-          <X className="h-4 w-4" /> Reset Filters
-        </Button>
-      </div>
+    <div style={{ minHeight: "100vh", fontFamily: "'Inter', sans-serif", color: "#fff", position: "relative" }}>
+      {/* Background */}
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, backgroundImage: "url('/hero-landscape.png')", backgroundSize: "cover", backgroundPosition: "center" }} />
+      <div style={{ position: "fixed", inset: 0, zIndex: 1, background: "linear-gradient(160deg, rgba(8,12,24,0.72) 0%, rgba(8,12,24,0.55) 100%)" }} />
 
-      {/* Filters Section */}
-      <Card className="mb-8 bg-muted/30 border-dashed">
-        <CardContent className="pt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Status</label>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value={ReportStatus.PENDING}>Open (Pending)</SelectItem>
-                <SelectItem value={ReportStatus.ACCEPTED}>Accepted</SelectItem>
-                <SelectItem value={ReportStatus.RESOLVED}>Resolved</SelectItem>
-              </SelectContent>
-            </Select>
+      <div style={{ position: "relative", zIndex: 2 }}>
+        {/* Navbar */}
+        <header style={{ position: "sticky", top: 0, zIndex: 50, ...glass, borderRadius: 0, borderLeft: "none", borderRight: "none", borderTop: "none", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 32px", height: 64 }}>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+            <Image src="/supportsync-logo.jpg" alt="SupportSync" width={36} height={36} style={{ borderRadius: "50%", objectFit: "cover" }} />
+            <span style={{ fontWeight: 800, fontSize: "1.1rem", color: "#fff" }}>SupportSync</span>
+          </Link>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Link href="/ngo-dashboard/accepted" style={{ color: "rgba(255,255,255,0.65)", fontSize: "0.875rem", fontWeight: 500, textDecoration: "none" }}>My Tasks</Link>
+            <button onClick={handleLogout} style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.65)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "7px 16px", fontWeight: 500, fontSize: "0.875rem", cursor: "pointer" }}>
+              Logout
+            </button>
           </div>
+        </header>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Priority</label>
-            <Select value={filterPriority} onValueChange={setFilterPriority}>
-              <SelectTrigger>
-                <SelectValue placeholder="Priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Priorities</SelectItem>
-                <SelectItem value={ReportPriority.HIGH}>High</SelectItem>
-                <SelectItem value={ReportPriority.MEDIUM}>Medium</SelectItem>
-                <SelectItem value={ReportPriority.LOW}>Low</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Location / City</label>
-            <div className="relative">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Search City..." 
-                className="pl-8" 
-                value={filterCity}
-                onChange={(e) => setFilterCity(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5 flex flex-col justify-end">
-            <div className="flex gap-2">
-              <Button 
-                variant={filterNearMe ? "default" : "outline"} 
-                className="flex-1 gap-2"
-                onClick={handleToggleNearMe}
-              >
-                <MapPin className="h-4 w-4" />
-                {filterNearMe ? "Proximity Active" : "Near Me"}
-              </Button>
-              {filterNearMe && (
-                <Select value={filterRadius.toString()} onValueChange={(v) => setFilterRadius(parseInt(v))}>
-                  <SelectTrigger className="w-[100px]">
-                    <SelectValue placeholder="Radius" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5 km</SelectItem>
-                    <SelectItem value="10">10 km</SelectItem>
-                    <SelectItem value="15">15 km</SelectItem>
-                    <SelectItem value="20">20 km</SelectItem>
-                    <SelectItem value="30">30 km</SelectItem>
-                    <SelectItem value="50">50 km</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1.5 md:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Date Range</label>
-            <div className="flex items-center gap-2">
-              <Input type="date" value={filterStartDate} onChange={(e) => setFilterStartDate(e.target.value)} className="text-sm" />
-              <span className="text-muted-foreground">to</span>
-              <Input type="date" value={filterEndDate} onChange={(e) => setFilterEndDate(e.target.value)} className="text-sm" />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {filteredReports.length === 0 ? (
-        <Card className="text-center py-20 border-dashed bg-muted/10">
-          <CardContent className="flex flex-col items-center gap-4">
-            <div className="p-4 rounded-full bg-muted">
-              <Search className="h-8 w-8 text-muted-foreground" />
-            </div>
+        <div style={{ padding: "32px 40px", maxWidth: 1280, margin: "0 auto" }}>
+          {/* Header */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24 }}>
             <div>
-              <h3 className="text-lg font-semibold">No issues found</h3>
-              <p className="text-muted-foreground max-w-xs mx-auto">
-                Try adjusting your filters or search terms to find relevant civic issues.
-              </p>
+              <p style={{ color: "#4D9EFF", fontWeight: 700, fontSize: "0.72rem", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4 }}>NGO PORTAL</p>
+              <h1 style={{ fontWeight: 800, fontSize: "clamp(1.5rem,3vw,2.2rem)", color: "#fff", margin: 0 }}>Operations Dashboard</h1>
             </div>
-            <Button variant="link" onClick={resetFilters}>Clear all filters</Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {filteredReports.map((report) => (
-            <Card key={report.id} className="overflow-hidden flex flex-col hover:shadow-lg transition-all border-muted h-full">
-              <Link href={`/reports/${report.id}`} className="flex-1">
-                {report.imageUrl && (
-                  <div className="w-full h-48 bg-muted relative">
-                    <Image 
-                      src={report.imageUrl} 
-                      alt={report.category} 
-                      fill 
-                      className="object-cover" 
-                    />
-                    <div className="absolute top-2 left-2">
-                      {getPriorityBadge(report.priority)}
-                    </div>
-                  </div>
+            <button onClick={resetFilters} style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.7)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 8, padding: "8px 16px", fontWeight: 500, fontSize: "0.85rem", cursor: "pointer" }}>
+              <X size={14} /> Reset Filters
+            </button>
+          </div>
+
+          {/* Filters */}
+          <div style={{ ...glass, padding: "20px 24px", marginBottom: 28, display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 16 }}>
+            {/* Status */}
+            <div>
+              <label style={labelStyle}>Status</label>
+              <Select value={filterStatus} onValueChange={setFilterStatus}>
+                <SelectTrigger style={{ ...inputGlass, border: "1px solid rgba(255,255,255,0.18)" }}>
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value={ReportStatus.PENDING}>Open (Pending)</SelectItem>
+                  <SelectItem value={ReportStatus.ACCEPTED}>Accepted</SelectItem>
+                  <SelectItem value={ReportStatus.RESOLVED}>Resolved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Priority */}
+            <div>
+              <label style={labelStyle}>Priority</label>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger style={{ ...inputGlass, border: "1px solid rgba(255,255,255,0.18)" }}>
+                  <SelectValue placeholder="Priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Priorities</SelectItem>
+                  <SelectItem value={ReportPriority.HIGH}>High</SelectItem>
+                  <SelectItem value={ReportPriority.MEDIUM}>Medium</SelectItem>
+                  <SelectItem value={ReportPriority.LOW}>Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* City */}
+            <div>
+              <label style={labelStyle}>Location / City</label>
+              <div style={{ position: "relative" }}>
+                <Search size={14} style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", color: "rgba(255,255,255,0.35)" }} />
+                <input placeholder="Search City..." value={filterCity} onChange={e => setFilterCity(e.target.value)} style={{ ...inputGlass, paddingLeft: 30 }} />
+              </div>
+            </div>
+
+            {/* Near Me */}
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", gap: 8 }}>
+              <label style={labelStyle}>Proximity</label>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button onClick={handleToggleNearMe} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: filterNearMe ? "rgba(77,158,255,0.3)" : "rgba(255,255,255,0.08)", color: filterNearMe ? "#4D9EFF" : "rgba(255,255,255,0.7)", border: `1px solid ${filterNearMe ? "#4D9EFF" : "rgba(255,255,255,0.18)"}`, borderRadius: 8, padding: "8px 12px", fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>
+                  <MapPin size={13} /> {filterNearMe ? "Active" : "Near Me"}
+                </button>
+                {filterNearMe && (
+                  <Select value={filterRadius.toString()} onValueChange={v => setFilterRadius(parseInt(v))}>
+                    <SelectTrigger style={{ ...inputGlass, width: 90, border: "1px solid rgba(255,255,255,0.18)" }}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["5","10","15","20","30","50"].map(v => <SelectItem key={v} value={v}>{v} km</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 )}
-                <CardHeader className="pb-3">
-                  <div className="flex justify-between items-start gap-2">
-                    <div className="flex-1">
-                      <CardTitle className="text-xl line-clamp-1">{report.category}</CardTitle>
-                      {!report.imageUrl && getPriorityBadge(report.priority)}
-                    </div>
-                    {getStatusBadge(report.status)}
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <p className="text-sm text-muted-foreground line-clamp-3">
-                    {report.description}
-                  </p>
-                  <div className="space-y-2">
-                    <div className="flex items-center text-sm text-muted-foreground gap-2">
-                      <MapPin className="w-4 h-4 text-primary" />
-                      <span className="truncate">{report.location.city ? `${report.location.city}, ${report.location.state}` : `${report.location.lat.toFixed(4)}, ${report.location.lng.toFixed(4)}`}</span>
-                    </div>
-                    <div className="flex items-center text-sm text-muted-foreground gap-2">
-                      <Clock className="w-4 h-4 text-primary" />
-                      <span>{formatDistanceToNow(new Date(report.createdAt), { addSuffix: true })}</span>
-                    </div>
-                  </div>
-                </CardContent>
-              </Link>
-              <CardFooter className="bg-muted/30 pt-4 border-t mt-auto">
-                {report.status === ReportStatus.PENDING && (
-                  <Button 
-                    className="w-full bg-primary hover:bg-primary/90" 
-                    onClick={() => handleUpdateStatus(report.id, ReportStatus.ACCEPTED)}
+              </div>
+            </div>
+
+            {/* Date Range */}
+            <div style={{ gridColumn: "span 2" }}>
+              <label style={labelStyle}>Date Range</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <input type="date" value={filterStartDate} onChange={e => setFilterStartDate(e.target.value)} style={{ ...inputGlass, flex: 1, colorScheme: "dark" }} />
+                <span style={{ color: "rgba(255,255,255,0.3)", fontSize: "0.8rem" }}>to</span>
+                <input type="date" value={filterEndDate} onChange={e => setFilterEndDate(e.target.value)} style={{ ...inputGlass, flex: 1, colorScheme: "dark" }} />
+              </div>
+            </div>
+          </div>
+
+          {/* Count */}
+          <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.82rem", marginBottom: 16 }}>
+            {filteredReports.length} issue{filteredReports.length !== 1 ? "s" : ""} found
+          </p>
+
+          {/* Reports */}
+          {filteredReports.length === 0 ? (
+            <div style={{ ...glass, textAlign: "center", padding: "64px 24px" }}>
+              <div style={{ width: 56, height: 56, borderRadius: "50%", background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+                <Search size={24} style={{ color: "rgba(255,255,255,0.3)" }} />
+              </div>
+              <h3 style={{ fontWeight: 700, fontSize: "1.1rem", color: "#fff", marginBottom: 8 }}>No issues found</h3>
+              <p style={{ color: "rgba(255,255,255,0.4)", fontSize: "0.875rem", marginBottom: 20 }}>Try adjusting your filters to find relevant civic issues.</p>
+              <button onClick={resetFilters} style={{ background: "rgba(77,158,255,0.15)", color: "#4D9EFF", border: "1px solid rgba(77,158,255,0.3)", borderRadius: 8, padding: "8px 20px", fontWeight: 600, fontSize: "0.875rem", cursor: "pointer" }}>Clear all filters</button>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 18 }}>
+              {filteredReports.map(report => {
+                const sc = statusConfig(report.status);
+                const pc = priorityConfig(report.priority);
+                return (
+                  <div key={report.id} style={{ ...glass, display: "flex", flexDirection: "column", overflow: "hidden", transition: "transform 0.2s, border-color 0.2s, box-shadow 0.2s" }}
+                    onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.borderColor = "rgba(77,158,255,0.35)"; e.currentTarget.style.boxShadow = "0 8px 32px rgba(77,158,255,0.12)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.borderColor = "rgba(255,255,255,0.18)"; e.currentTarget.style.boxShadow = "none"; }}
                   >
-                    Accept Issue
-                  </Button>
-                )}
-                {report.status === ReportStatus.ACCEPTED && report.assignedNgoId === user?.uid && (
-                  <Button 
-                    className="w-full" 
-                    variant="default"
-                    onClick={() => handleUpdateStatus(report.id, ReportStatus.RESOLVED)}
-                  >
-                    Mark as Resolved
-                  </Button>
-                )}
-                {report.status === ReportStatus.RESOLVED && (
-                  <Button className="w-full" variant="outline" disabled>
-                    <CheckCircle2 className="w-4 h-4 mr-2" /> Resolved
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
-          ))}
+                    <Link href={`/reports/${report.id}`} style={{ textDecoration: "none", color: "inherit", flex: 1 }}>
+                      {/* Image */}
+                      {report.imageUrl ? (
+                        <div style={{ width: "100%", height: 160, position: "relative" }}>
+                          <Image src={report.imageUrl} alt={report.category} fill style={{ objectFit: "cover" }} />
+                          <div style={{ position: "absolute", inset: 0, background: "linear-gradient(to top, rgba(8,12,24,0.8) 0%, transparent 55%)" }} />
+                          <span style={{ position: "absolute", top: 10, left: 12, background: pc.bg, color: pc.color, border: `1px solid ${pc.color}44`, borderRadius: 50, padding: "2px 8px", fontSize: "0.65rem", fontWeight: 700 }}>{pc.label}</span>
+                        </div>
+                      ) : (
+                        <div style={{ width: "100%", height: 80, background: "linear-gradient(135deg, rgba(26,61,171,0.2), rgba(46,170,74,0.12))", display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                          <span style={{ position: "absolute", top: 8, left: 10, background: pc.bg, color: pc.color, border: `1px solid ${pc.color}44`, borderRadius: 50, padding: "2px 8px", fontSize: "0.65rem", fontWeight: 700 }}>{pc.label}</span>
+                        </div>
+                      )}
+
+                      {/* Body */}
+                      <div style={{ padding: "14px 16px 12px" }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                          <h3 style={{ fontWeight: 700, fontSize: "1rem", color: "#fff", margin: 0, lineHeight: 1.3 }}>{report.category}</h3>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, background: sc.bg, color: sc.color, border: `1px solid ${sc.color}33`, borderRadius: 50, padding: "3px 9px", fontSize: "0.68rem", fontWeight: 700, flexShrink: 0 }}>
+                            {sc.icon} {sc.label}
+                          </span>
+                        </div>
+                        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: "0.83rem", lineHeight: 1.55, margin: "0 0 12px", overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{report.description}</p>
+                        <div style={{ borderTop: "1px solid rgba(255,255,255,0.07)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 5 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.38)", fontSize: "0.78rem" }}>
+                            <MapPin size={12} style={{ color: "#4D9EFF" }} />
+                            <span>{report.location.city ? `${report.location.city}, ${report.location.state}` : `${report.location.lat.toFixed(4)}, ${report.location.lng.toFixed(4)}`}</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, color: "rgba(255,255,255,0.38)", fontSize: "0.78rem" }}>
+                            <Clock size={12} style={{ color: "#4D9EFF" }} />
+                            <span>{formatDistanceToNow(new Date(report.createdAt), { addSuffix: true })}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+
+                    {/* Action footer */}
+                    <div style={{ padding: "10px 16px 14px", borderTop: "1px solid rgba(255,255,255,0.07)" }}>
+                      {report.status === ReportStatus.PENDING && (
+                        <button onClick={() => handleUpdateStatus(report.id, ReportStatus.ACCEPTED)}
+                          style={{ width: "100%", background: "linear-gradient(135deg,#4D9EFF,#2563EB)", color: "#fff", border: "none", borderRadius: 8, padding: "9px", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", transition: "opacity 0.2s" }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >Accept Issue</button>
+                      )}
+                      {report.status === ReportStatus.ACCEPTED && report.assignedNgoId === user?.uid && (
+                        <button onClick={() => handleUpdateStatus(report.id, ReportStatus.RESOLVED)}
+                          style={{ width: "100%", background: "linear-gradient(135deg,#2EAA4A,#16803C)", color: "#fff", border: "none", borderRadius: 8, padding: "9px", fontWeight: 700, fontSize: "0.875rem", cursor: "pointer", transition: "opacity 0.2s" }}
+                          onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
+                          onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+                        >Mark as Resolved</button>
+                      )}
+                      {report.status === ReportStatus.RESOLVED && (
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, color: "#22C55E", fontSize: "0.875rem", fontWeight: 600, padding: "8px" }}>
+                          <CheckCircle2 size={15} /> Resolved
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

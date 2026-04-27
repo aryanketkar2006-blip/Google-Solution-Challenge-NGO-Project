@@ -9,8 +9,8 @@ export function Breadcrumbs() {
   const pathname = usePathname();
   const { role } = useAuth();
 
-  // Don't show breadcrumbs on landing page
-  if (pathname === "/") return null;
+  // Don't show breadcrumbs on landing page or auth pages
+  if (pathname === "/" || pathname === "/welcome" || pathname === "/login" || pathname === "/signup" || pathname === "/dashboard" || pathname === "/report" || pathname.startsWith("/ngo-dashboard")) return null;
 
   const pathSegments = pathname.split("/").filter((v) => v.length > 0);
   

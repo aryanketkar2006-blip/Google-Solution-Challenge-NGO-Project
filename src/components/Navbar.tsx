@@ -5,13 +5,14 @@ import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
 import { auth } from "@/lib/firebase";
 import { signOut } from "firebase/auth";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Image from "next/image";
 import { UserCircle, LogOut, FileText, Home, Briefcase, Bell } from "lucide-react";
 
 export function Navbar() {
   const { user, role, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     try {
@@ -22,12 +23,14 @@ export function Navbar() {
     }
   };
 
+  if (pathname === "/welcome" || pathname === "/login" || pathname === "/signup" || pathname === "/dashboard" || pathname === "/report" || pathname.startsWith("/ngo-dashboard")) return null;
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 px-4 md:px-8">
+    <header className="sticky top-0 w-full px-4 md:px-8" style={{ zIndex: 100, background: 'rgba(255, 255, 255, 0.85)', backdropFilter: 'blur(12px)', borderBottom: '1px solid rgba(26, 61, 171, 0.08)' }}>
       <div className="container flex h-16 items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
-          <Image src="/civix.webp" alt="Civix Logo" width={32} height={32} className="h-8 w-auto" priority />
-          <span className="text-xl font-bold tracking-tight">Civix</span>
+          <Image src="/supportsync-logo.jpg" alt="SupportSync Logo" width={32} height={32} className="h-8 w-auto" priority />
+          <span style={{ fontFamily: "'Nunito', 'Inter', sans-serif", fontWeight: 800, fontSize: "1.25rem", color: "#1A3DAB", letterSpacing: "-0.3px" }}>SupportSync</span>
         </Link>
 
         <div className="flex items-center gap-4">
@@ -79,10 +82,10 @@ export function Navbar() {
               ) : (
                 <>
                   <Link href="/login">
-                    <Button variant="ghost">Login</Button>
+                    <Button variant="ghost" style={{ color: '#1A3DAB', fontWeight: 500, background: 'transparent', border: 'none', padding: '10px 20px', borderRadius: '8px', transition: 'background 0.2s' }} className="hover:bg-[rgba(26,61,171,0.08)]">Login</Button>
                   </Link>
                   <Link href="/signup">
-                    <Button>Sign up</Button>
+                    <Button style={{ background: '#2EAA4A', color: '#FFFFFF', border: 'none', borderRadius: '8px', padding: '10px 22px', fontWeight: 600, transition: 'background 0.2s, transform 0.15s' }} className="hover:bg-[#258F3E] hover:scale-[1.03]">Sign up</Button>
                   </Link>
                 </>
               )}

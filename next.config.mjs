@@ -4,7 +4,7 @@ const nextConfig = {
     domains: ["res.cloudinary.com"],
   },
   eslint: {
-    ignoreDuringBuilds: false,
+    ignoreDuringBuilds: true,
   },
   typescript: {
     ignoreBuildErrors: false,

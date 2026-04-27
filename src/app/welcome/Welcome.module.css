@@ -1,0 +1,118 @@
+.container {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #EDE9F6 0%, #F5F3FF 50%, #E8F4FD 100%);
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 9999; /* Cover everything just in case */
+  cursor: pointer;
+  animation: fadeIn 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.container.exiting {
+  animation: fadeOut 0.5s ease-in forwards;
+}
+
+.logo {
+  position: absolute;
+  top: 24px;
+  left: 24px;
+  height: 40px;
+  width: auto;
+  z-index: 10;
+}
+
+.orbContainer {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.orb {
+  position: absolute;
+  width: 420px;
+  height: 420px;
+  border-radius: 50%;
+  filter: blur(80px);
+  /* Use a combination of gradients to simulate the 3 color stops */
+  background: radial-gradient(circle at 25% 25%, rgba(245, 166, 35, 0.55) 0%, transparent 50%),
+              radial-gradient(circle at 50% 75%, rgba(46, 170, 74, 0.45) 0%, transparent 50%),
+              radial-gradient(circle at 75% 50%, rgba(26, 61, 171, 0.35) 0%, transparent 50%);
+  animation: pulse 4s ease-in-out infinite;
+  z-index: 0;
+}
+
+.welcomeText {
+  position: relative;
+  z-index: 1;
+  font-family: 'Nunito', 'Inter', sans-serif;
+  font-weight: 700;
+  font-size: clamp(2rem, 5vw, 3.5rem);
+  color: #FFFFFF;
+  text-shadow: 0 2px 16px rgba(26, 61, 171, 0.25);
+  letter-spacing: -0.5px;
+  text-align: center;
+  margin: 0;
+}
+
+.hintText {
+  position: relative;
+  z-index: 1;
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.75);
+  margin-top: 20px;
+  opacity: 0; /* Hidden initially, shown after delay */
+  animation: fadeInOut 2.5s ease-in-out infinite;
+  animation-delay: 1.2s;
+  animation-fill-mode: forwards; /* Keeps the state */
+}
+
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.04);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.07);
+    opacity: 1;
+  }
+}
+
+@keyframes fadeInOut {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
+}
